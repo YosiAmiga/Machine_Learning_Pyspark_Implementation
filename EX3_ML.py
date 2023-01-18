@@ -9,7 +9,6 @@ from pyspark.sql.types import DoubleType
 from pyspark.sql.functions import udf
 from pyspark.sql.functions import cast
 import matplotlib.pyplot as plt
-from CONSTS import possible_values
 
 ################### DATASET CLEANING SECTION ###################
 
@@ -130,6 +129,7 @@ test_data = test_data.drop("Yearly-income(Label)")
 # df = df.drop("native-country")
 df.show(30)
 test_data.show(30)
+feature_names = df.columns
 
 # # Create an IndexToString object
 # converter = IndexToString(inputCol="label", outputCol="original_label")
@@ -194,27 +194,28 @@ with open("best_param.txt", "w") as file:
 
 # B. By checking featureImportances, which features are the most important? Try to
 # give an analysis on your results
-#
-#
-# # Access the feature importances
-# importances = bestModel.stages[-1].featureImportances
-#
+
+
+# Access the feature importances
+importances = bestModel.stages[-1].featureImportances
+print("Feature Importance, " + str(importances))
 # # Extract the feature names
-# feature_names = trainingData.columns
-#
-# # Create a list of (feature, importance) tuples
-# feature_importances = [(feature_names[i], importances[i]) for i in range(len(feature_names))]
-#
-# # Sort the feature importances by descending importance
-# feature_importances.sort(key=lambda x: x[1], reverse=True)
-#
+feature_names = trainingData.columns
+
+# Create a list of (feature, importance) tuples
+feature_importances = [(feature_names[i], importances[i]) for i in range(len(feature_names)-1)]
+
+# Sort the feature importances by descending importance
+feature_importances.sort(key=lambda x: x[1], reverse=True)
+
 # # Print the feature importances
-# for feature, importance in feature_importances:
-#     print("Feature:", feature, "Importance:", importance)
-# # Plot the feature importances
-# plt.bar(range(len(feature_importances)), [importance for _, importance in feature_importances], align='center')
-# plt.xticks(range(len(feature_importances)), [feature for feature, _ in feature_importances], rotation=90)
-# plt.xlabel('Feature')
-# plt.ylabel('Importance')
-# plt.title('Feature Importances')
-# plt.show()
+for feature, importance in feature_importances:
+    print("Feature:", feature, "Importance:", importance)
+
+# Plot the feature importances
+plt.bar(range(len(feature_importances)), [importance for _, importance in feature_importances], align='center')
+plt.xticks(range(len(feature_importances)), [feature for feature, _ in feature_importances], rotation=90)
+plt.xlabel('Feature')
+plt.ylabel('Importance')
+plt.title('Feature Importances')
+plt.show()
