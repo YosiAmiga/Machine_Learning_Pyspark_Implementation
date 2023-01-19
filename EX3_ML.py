@@ -1,6 +1,6 @@
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import RandomForestClassifier
-from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.classification import RandomForestClassifier, GBTClassifier
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator, BinaryClassificationEvaluator
 from pyspark.ml.feature import VectorAssembler, StringIndexer,IndexToString
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 from pyspark.sql import SparkSession
@@ -166,6 +166,7 @@ paramGrid = ParamGridBuilder() \
     .addGrid(rf.featureSubsetStrategy, ["auto", "sqrt", "log2"]) \
     .build()
 
+
 # Create a cross-validator to tune the hyperparameters
 cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
 
@@ -219,3 +220,95 @@ plt.xlabel('Feature')
 plt.ylabel('Importance')
 plt.title('Feature Importances')
 plt.show()
+
+### CREATING GRADIENT-BOOST TREE CLASSIFIERS ###
+
+# Create the Gradient Descent Classifier
+gbt = GBTClassifier(labelCol="label", featuresCol="features",maxBins=100)
+# Repeat the same process for GBTClassifier
+pipeline_gbt = Pipeline(stages=[assembler, gbt])
+# Repeat the same process for GBTClassifier
+paramGrid_gbt = ParamGridBuilder() \
+    .addGrid(gbt.maxIter, [5, 10, 15]) \
+    .addGrid(gbt.maxDepth, [2, 4, 6]) \
+    .addGrid(gbt.featureSubsetStrategy, ["auto", "sqrt", "log2"]) \
+    .build()
+
+# Create a cross-validator to tune the hyperparameters
+cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
+# Fit the model to the training data
+model_gbt = cv_gbt.fit(trainingData)
+
+# Create predictions for each model
+predictions_rf = model.transform(testData)
+predictions_gbt = model_gbt.transform(testData)
+
+# Create the evaluator object
+evaluator = MulticlassClassificationEvaluator()
+
+# Set the metric for accuracy
+evaluator.setMetricName("accuracy")
+# Evaluate the accuracy of the RandomForestClassifier model
+accuracy_rf = evaluator.evaluate(predictions_rf)
+accuracy_gbt = evaluator.evaluate(predictions_gbt)
+
+# Set the metric for F1 score
+evaluator.setMetricName("f1")
+# Evaluate the F1 score of the RandomForestClassifier model
+f1_rf = evaluator.evaluate(predictions_rf)
+f1_gbt = evaluator.evaluate(predictions_gbt)
+
+# Set the metric for AUC
+evaluator.setMetricName("weightedPrecision")
+# Evaluate the AUC of the RandomForestClassifier model
+auc_rf = evaluator.evaluate(predictions_rf)
+auc_gbt = evaluator.evaluate(predictions_gbt)
+
+
+# Compare the results
+print("Accuracy of Random Forest Classifier: ", accuracy_rf)
+print("Accuracy of GBT Classifier: ", accuracy_gbt)
+
+print("F1 score of Random Forest Classifier: ", f1_rf)
+print("F1 score of GBT Classifier: ", f1_gbt)
+
+print("AUC of Random Forest Classifier: ", auc_rf)
+print("AUC of GBT Classifier: ", auc_gbt)
+
+
+# # Convert the predictions DataFrame to an RDD
+# predictions_rdd_rf = predictions_rf.select("rawPrediction", "label").rdd
+# predictions_rdd_gbt = predictions_gbt.select("rawPrediction", "label").rdd
+#
+# # Instantiate a BinaryClassificationMetrics object
+# metrics_rf = BinaryClassificationMetrics(predictions_rdd_rf)
+# metrics_gbt = BinaryClassificationMetrics(predictions_rdd_gbt)
+#
+# # Compute the ROC curve
+# roc_rf = metrics_rf.roc()
+# roc_gbt = metrics_gbt.roc()
+#
+# # Convert the ROC curve to an RDD and collect it as a list of (FPR, TPR) tuples
+# roc_points_rf = roc_rf.collect()
+# roc_points_gbt = roc_gbt.collect()
+#
+#
+# fpr = [x[0] for x in roc_points_rf]
+# tpr = [x[1] for x in roc_points_rf]
+#
+# plt.figure()
+# plt.plot(fpr, tpr)
+# plt.xlabel('False Positive Rate')
+# plt.ylabel('True Positive Rate')
+# plt.title('ROC Curve for Random Forest')
+# plt.show()
+#
+# fpr_gbt = [x[0] for x in roc_points_gbt]
+# tpr_gbt = [x[1] for x in roc_points_gbt]
+#
+# plt.figure()
+# plt.plot(fpr, tpr)
+# plt.xlabel('False Positive Rate')
+# plt.ylabel('True Positive Rate')
+# plt.title('ROC Curve for Gradient Boost Trees')
+# plt.show()
