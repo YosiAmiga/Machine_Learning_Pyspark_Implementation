@@ -18,108 +18,71 @@ spark = SparkSession.builder.appName("Random Forest Example").getOrCreate()
 # Load the dataset
 df = spark.read.text("adult.data")
 test_data = spark.read.text("adult.test")
-# Split the values in the first column based on the "," delimiter
-df = df.select(split(df.value, ", ").alias("features"))
-test_data = test_data.select(split(test_data.value, ", ").alias("features"))
 
-# Get the number of columns
-num_of_cols = len(df.select("features").first()[0])
-num_of_cols_test = len(test_data.select("features").first()[0])
 
-# Create the new columns' names
-col_names = ["col" + str(i) for i in range(num_of_cols)]
-col_names_test = ["col" + str(i) for i in range(num_of_cols_test)]
+def dataframeCleaning(df):
+    # Split the values in the first column based on the "," delimiter
+    df = df.select(split(df.value, ", ").alias("features"))
+    # Get the number of columns
+    num_of_cols = len(df.select("features").first()[0])
+    # Create the new columns' names
+    col_names = ["col" + str(i) for i in range(num_of_cols)]
+    # Create the new columns
+    for i, col_name in enumerate(col_names):
+        df = df.withColumn(col_name, df["features"][i])
+    # drop the old column
+    df = df.drop("features")
+    # Rename the columns to the desired names
+    df = df.withColumnRenamed("col0", "age") \
+        .withColumnRenamed("col1", "workclass") \
+        .withColumnRenamed("col2", "fnlwgt") \
+        .withColumnRenamed("col3", "education") \
+        .withColumnRenamed("col4", "education-num") \
+        .withColumnRenamed("col5", "marital-status") \
+        .withColumnRenamed("col6", "occupation") \
+        .withColumnRenamed("col7", "relationship") \
+        .withColumnRenamed("col8", "race") \
+        .withColumnRenamed("col9", "sex") \
+        .withColumnRenamed("col10", "capital-gain") \
+        .withColumnRenamed("col11", "capital-loss") \
+        .withColumnRenamed("col12", "hours-per-week") \
+        .withColumnRenamed("col13", "native-country") \
+        .withColumnRenamed("col14", "Yearly-income(Label)")
 
-# Create the new columns
-for i, col_name in enumerate(col_names):
-    df = df.withColumn(col_name, df["features"][i])
+    # Set all the values of '?' to be None, it is a garbage value
+    df = df.replace("?", None)
 
-# Create the new columns
-for i, col_names_test in enumerate(col_names_test):
-    test_data = test_data.withColumn(col_names_test, test_data["features"][i])
+    # Each non numeric column value should be represented as a double value in the final dataset
+    features = ["workclass", "education", "marital-status", "occupation", "relationship", "race", "sex",
+                "native-country"]
+    for feature in features:
+        # Create a StringIndexer object
+        indexer = StringIndexer(inputCol=feature, outputCol=feature + "_index", handleInvalid='keep')
+        # Fit the indexer on your dataset and transform the data
+        indexer_model = indexer.fit(df)
+        df = indexer_model.transform(df)
+        df = df.drop(feature)
+        df = df.withColumnRenamed(feature + "_index", feature)
 
-# drop the old column
-df = df.drop("features")
-test_data = test_data.drop("features")
+    # convert the value column from string to double
+    df = df.withColumn("age", col("age").cast('double'))
+    df = df.withColumn("fnlwgt", col("fnlwgt").cast('double'))
+    df = df.withColumn("education-num", col("education-num").cast('double'))
+    df = df.withColumn("capital-gain", col("capital-gain").cast('double'))
+    df = df.withColumn("capital-loss", col("capital-loss").cast('double'))
+    df = df.withColumn("hours-per-week", col("hours-per-week").cast('double'))
 
-# Rename the columns to the desired names
-df = df.withColumnRenamed("col0", "age")\
-    .withColumnRenamed("col1", "workclass")\
-    .withColumnRenamed("col2", "fnlwgt")\
-    .withColumnRenamed("col3", "education")\
-    .withColumnRenamed("col4", "education-num")\
-    .withColumnRenamed("col5", "marital-status")\
-    .withColumnRenamed("col6", "occupation")\
-    .withColumnRenamed("col7", "relationship")\
-    .withColumnRenamed("col8", "race")\
-    .withColumnRenamed("col9", "sex")\
-    .withColumnRenamed("col10", "capital-gain")\
-    .withColumnRenamed("col11", "capital-loss")\
-    .withColumnRenamed("col12", "hours-per-week")\
-    .withColumnRenamed("col13", "native-country")\
-    .withColumnRenamed("col14", "Yearly-income(Label)")
-
-test_data = test_data.withColumnRenamed("col0", "age")\
-    .withColumnRenamed("col1", "workclass")\
-    .withColumnRenamed("col2", "fnlwgt")\
-    .withColumnRenamed("col3", "education")\
-    .withColumnRenamed("col4", "education-num")\
-    .withColumnRenamed("col5", "marital-status")\
-    .withColumnRenamed("col6", "occupation")\
-    .withColumnRenamed("col7", "relationship")\
-    .withColumnRenamed("col8", "race")\
-    .withColumnRenamed("col9", "sex")\
-    .withColumnRenamed("col10", "capital-gain")\
-    .withColumnRenamed("col11", "capital-loss")\
-    .withColumnRenamed("col12", "hours-per-week")\
-    .withColumnRenamed("col13", "native-country")\
-    .withColumnRenamed("col14", "Yearly-income(Label)")
-
-# Set all the values of '?' to be None, it is a garbage value
-df = df.replace("?", None)
-test_data = test_data.replace("?", None)
-
-# Each non numeric column value should be represented as a double value in the final dataset
-features = ["workclass", "education", "marital-status", "occupation", "relationship", "race", "sex", "native-country"]
-for feature in features:
-    # Create a StringIndexer object
-    indexer = StringIndexer(inputCol=feature, outputCol=feature+"_index",handleInvalid='keep')
-    # Fit the indexer on your dataset and transform the data
+    indexer = StringIndexer(inputCol="Yearly-income(Label)", outputCol="label")
     indexer_model = indexer.fit(df)
     df = indexer_model.transform(df)
-    df = df.drop(feature)
-    df = df.withColumnRenamed(feature+"_index", feature)
-    indexer_model = indexer.fit(test_data)
-    # print(indexer_model.labels)
-    test_data = indexer_model.transform(test_data)
-    test_data = test_data.drop(feature)
-    test_data = test_data.withColumnRenamed(feature+"_index", feature)
+    df = df.drop("Yearly-income(Label)")
+    df.show(30)
+    return df
 
 
-# convert the value column from string to double
-df = df.withColumn("age", col("age").cast('double'))
-df = df.withColumn("fnlwgt", col("fnlwgt").cast('double'))
-df = df.withColumn("education-num", col("education-num").cast('double'))
-df = df.withColumn("capital-gain", col("capital-gain").cast('double'))
-df = df.withColumn("capital-loss", col("capital-loss").cast('double'))
-df = df.withColumn("hours-per-week", col("hours-per-week").cast('double'))
-
-test_data = test_data.withColumn("age", col("age").cast('double'))
-test_data = test_data.withColumn("fnlwgt", col("fnlwgt").cast('double'))
-test_data = test_data.withColumn("education-num", col("education-num").cast('double'))
-test_data = test_data.withColumn("capital-gain", col("capital-gain").cast('double'))
-test_data = test_data.withColumn("capital-loss", col("capital-loss").cast('double'))
-test_data = test_data.withColumn("hours-per-week", col("hours-per-week").cast('double'))
-
-
-indexer = StringIndexer(inputCol="Yearly-income(Label)", outputCol="label")
-indexer_model = indexer.fit(df)
-df = indexer_model.transform(df)
-df = df.drop("Yearly-income(Label)")
-
-indexer_model = indexer.fit(test_data)
-test_data = indexer_model.transform(test_data)
-test_data = test_data.drop("Yearly-income(Label)")
+# Clean and set up data for model creation
+df = dataframeCleaning(df)
+test_data = dataframeCleaning(test_data)
 
 # pyspark.sql.utils.IllegalArgumentException: requirement failed:
 # DecisionTree requires maxBins (= 32) to be at least as large as the number of values in each categorical feature,
@@ -127,16 +90,7 @@ test_data = test_data.drop("Yearly-income(Label)")
 # Consider removing this and other categorical features with a large number of values, or add more training examples.
 # df = df.drop("native-country")
 # df = df.drop("native-country")
-df.show(30)
-test_data.show(30)
 feature_names = df.columns
-
-# # Create an IndexToString object
-# converter = IndexToString(inputCol="label", outputCol="original_label")
-#
-# # Transform the DataFrame
-# df = converter.transform(df)
-# df.show(30)
 
 ################### MODEL CREATION SECTION ###################
 
@@ -169,6 +123,7 @@ paramGrid = ParamGridBuilder() \
 
 # Create a cross-validator to tune the hyperparameters
 cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
+# cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=BinaryClassificationEvaluator(), numFolds=3)
 
 # Fit the model to the training data
 model = cv.fit(trainingData)
@@ -200,7 +155,7 @@ with open("best_param.txt", "w") as file:
 # Access the feature importances
 importances = bestModel.stages[-1].featureImportances
 print("Feature Importance, " + str(importances))
-# # Extract the feature names
+# Extract the feature names
 feature_names = trainingData.columns
 
 # Create a list of (feature, importance) tuples
@@ -209,7 +164,7 @@ feature_importances = [(feature_names[i], importances[i]) for i in range(len(fea
 # Sort the feature importances by descending importance
 feature_importances.sort(key=lambda x: x[1], reverse=True)
 
-# # Print the feature importances
+# Print the feature importances
 for feature, importance in feature_importances:
     print("Feature:", feature, "Importance:", importance)
 
@@ -236,6 +191,8 @@ paramGrid_gbt = ParamGridBuilder() \
 
 # Create a cross-validator to tune the hyperparameters
 cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
+# cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=BinaryClassificationEvaluator(), numFolds=3)
+
 # Fit the model to the training data
 model_gbt = cv_gbt.fit(trainingData)
 
