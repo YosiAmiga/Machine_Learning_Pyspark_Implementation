@@ -1,5 +1,5 @@
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import RandomForestClassifier, GBTClassifier
+from pyspark.ml.classification import RandomForestClassifier, GBTClassifier, BinaryLogisticRegressionSummary
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator, BinaryClassificationEvaluator
 from pyspark.ml.feature import VectorAssembler, StringIndexer,IndexToString
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
@@ -231,7 +231,14 @@ print("F1 score of GBT Classifier: ", f1_gbt)
 
 print("AUC of Random Forest Classifier: ", auc_rf)
 print("AUC of GBT Classifier: ", auc_gbt)
-
+models_compare = "Accuracy of Random Forest Classifier: " + accuracy_rf +\
+                 "\nAccuracy of GBT Classifier: " + accuracy_gbt +\
+                 "\nF1 score of Random Forest Classifier: " + f1_rf + \
+                 "\nF1 score of GBT Classifier: " + f1_gbt + \
+                 "\nAUC of Random Forest Classifier: " + auc_rf + \
+                 "\nAUC of GBT Classifier: "+ auc_gbt
+with open("models_compare.txt", "w") as file:
+    file.write(str(models_compare))
 
 # # Convert the predictions DataFrame to an RDD
 # predictions_rdd_rf = predictions_rf.select("rawPrediction", "label").rdd

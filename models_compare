@@ -1,0 +1,6 @@
+Accuracy of Random Forest Classifier:  0.8498863706160555
+Accuracy of GBT Classifier:  0.8579325594250967
+F1 score of Random Forest Classifier:  0.8349159511454767
+F1 score of GBT Classifier:  0.8523980983263586
+AUC of Random Forest Classifier:  0.8453686397214646
+AUC of GBT Classifier:  0.8516790486983793
