@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 spark = SparkSession.builder.appName("Random Forest Example").getOrCreate()
 
 # Load the dataset
-df = spark.read.text("adult.data")
-test_data = spark.read.text("adult.test")
+train_df = spark.read.text("adult.data")
+test_df = spark.read.text("adult.test")
+
 
 
 def dataframeCleaning(df):
@@ -76,21 +77,16 @@ def dataframeCleaning(df):
     indexer_model = indexer.fit(df)
     df = indexer_model.transform(df)
     df = df.drop("Yearly-income(Label)")
-    df.show(30)
     return df
 
 
 # Clean and set up data for model creation
-df = dataframeCleaning(df)
-test_data = dataframeCleaning(test_data)
+train_df = dataframeCleaning(train_df)
+test_df = dataframeCleaning(test_df)
+train_df.show(30)
+test_df.show(30)
 
-# pyspark.sql.utils.IllegalArgumentException: requirement failed:
-# DecisionTree requires maxBins (= 32) to be at least as large as the number of values in each categorical feature,
-# but categorical feature 13 has 42 values.
-# Consider removing this and other categorical features with a large number of values, or add more training examples.
-# df = df.drop("native-country")
-# df = df.drop("native-country")
-feature_names = df.columns
+feature_names = train_df.columns
 
 ################### MODEL CREATION SECTION ###################
 
@@ -99,15 +95,12 @@ feature_names = df.columns
 # Tune the hyperparameters numTrees, subsamplingRate, and featureSubsetStrategy.
 
 #################### Create the model and hyperparameters #####################
-
-# # Split the data into training and test sets
-# (trainingData, testData) = data.randomSplit([0.7, 0.3])
-trainingData = df
-testData = test_data
-# # Create a vector assembler to combine all feature columns into a single vector column
+#################### Random Forest Classifier ####################
+trainingData = train_df
+testData = test_df
+# Create a vector assembler to combine all feature columns into a single vector column
 assembler = VectorAssembler(inputCols=trainingData.columns[:-1], outputCol="features")
 
-# Create the Random Forest Classifier
 rf = RandomForestClassifier(labelCol="label", featuresCol="features",maxBins=100)
 
 # Create a pipeline to combine the vector assembler and the classifier
@@ -120,31 +113,61 @@ paramGrid = ParamGridBuilder() \
     .addGrid(rf.featureSubsetStrategy, ["auto", "sqrt", "log2"]) \
     .build()
 
-
-# Create a cross-validator to tune the hyperparameters
-cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
-# cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=BinaryClassificationEvaluator(), numFolds=3)
+## Binary:
+# Binary classification
+binary_cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=BinaryClassificationEvaluator(), numFolds=3)
 
 # Fit the model to the training data
-model = cv.fit(trainingData)
+model_binary = binary_cv.fit(trainingData)
 
-#################### Evaluate the model performance #####################
 
 # Use the best model to predict on the test data
-predictions = model.transform(testData)
-evaluator = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="accuracy")
-accuracy = evaluator.evaluate(predictions)
+predictions = model_binary.transform(testData)
+
+# Evaluate the model using the BinaryClassificationEvaluator
+binary_evaluator = BinaryClassificationEvaluator(labelCol="label", rawPredictionCol="rawPrediction", metricName="areaUnderROC")
+accuracy = binary_evaluator.evaluate(predictions)
 print("Accuracy:", accuracy)
 
-# Find the best combination of hyperparameters
-bestModel = model.bestModel
+bestModel = model_binary.bestModel
 best_param = bestModel.stages[1].extractParamMap()
 
-# print(best_param)
-with open("best_param.txt", "w") as file:
-    content = str(best_param)
-    content = content.replace("name=", "\nname=")
-    file.write(content)
+# Iterate over the dictionary and extract the values of the best hyperparameters
+best_params = {}
+for k, v in best_param.items():
+    if k.name in ["numTrees", "subsamplingRate", "featureSubsetStrategy"]:
+        best_params[k.name] = v
+
+# Print the extracted best hyperparameters
+print("Best hyperparameters:")
+for k, v in best_params.items():
+    print("\t{}: {}".format(k, v))
+
+### Multiclass: COMMENT OUT FOR NOW
+# Create a cross-validator to tune the hyperparameters
+# cv = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
+
+# Fit the model to the training data
+# model = cv.fit(trainingData)
+
+# # Use the best model to predict on the test data
+# predictions = model.transform(testData)
+# evaluator = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="accuracy")
+# accuracy = evaluator.evaluate(predictions)
+# print("Accuracy:", accuracy)
+
+# # Use the best model to predict on the test data
+# predictions = model.transform(testData)
+# evaluator = BinaryClassificationEvaluator(labelCol="label", rawPredictionCol="prediction", metricName="areaUnderROC")
+# accuracy = evaluator.evaluate(predictions)
+# print("areaUnderROC:", accuracy)
+
+# # Find the best combination of hyperparameters
+# bestModel = model.bestModel
+# best_param = bestModel.stages[1].extractParamMap()
+# content = str(best_param)
+# content = content.replace("name=", "\nname=")
+# content
 
 
 
@@ -189,38 +212,53 @@ paramGrid_gbt = ParamGridBuilder() \
     .addGrid(gbt.featureSubsetStrategy, ["auto", "sqrt", "log2"]) \
     .build()
 
-# Create a cross-validator to tune the hyperparameters
-cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=MulticlassClassificationEvaluator(), numFolds=3)
-# cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=BinaryClassificationEvaluator(), numFolds=3)
+### Binary classification:
+# Binary classicivation
+binary_cv_gbt = CrossValidator(estimator=pipeline, estimatorParamMaps=paramGrid, evaluator=BinaryClassificationEvaluator(), numFolds=3)
 
 # Fit the model to the training data
-model_gbt = cv_gbt.fit(trainingData)
+model_gbt_binary = binary_cv_gbt.fit(trainingData)
 
-# Create predictions for each model
-predictions_rf = model.transform(testData)
-predictions_gbt = model_gbt.transform(testData)
+### Multiclass: TO DELETE
+# Create a cross-validator to tune the hyperparameters
+# cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=MulticlassClassificationEvaluator(), numFolds=3)# cv_gbt = CrossValidator(estimator=pipeline_gbt, estimatorParamMaps=paramGrid_gbt, evaluator=BinaryClassificationEvaluator(), numFolds=3)
+
+# Fit the model to the training data
+# model_gbt = cv_gbt.fit(trainingData)
+
+# predictions_rf = model.transform(testData)
+# predictions_gbt = model_gbt.transform(testData)
+
+predictions_rf = model_binary.transform(testData)
+predictions_gbt = model_gbt_binary.transform(testData)
 
 # Create the evaluator object
 evaluator = MulticlassClassificationEvaluator()
 
+# Create BinaryClassificationMetrics
+
+binary_metrics = BinaryClassificationEvaluator()
+
 # Set the metric for accuracy
 evaluator.setMetricName("accuracy")
-# Evaluate the accuracy of the RandomForestClassifier model
 accuracy_rf = evaluator.evaluate(predictions_rf)
 accuracy_gbt = evaluator.evaluate(predictions_gbt)
+print("Accuracy of Random Forest Classifier: ", accuracy_rf)
+print("Accuracy of GBT Classifier: ", accuracy_gbt)
 
 # Set the metric for F1 score
 evaluator.setMetricName("f1")
-# Evaluate the F1 score of the RandomForestClassifier model
 f1_rf = evaluator.evaluate(predictions_rf)
 f1_gbt = evaluator.evaluate(predictions_gbt)
+print("F1 score of Random Forest Classifier: ", f1_rf)
+print("F1 score of GBT Classifier: ", f1_gbt)
 
 # Set the metric for AUC
 evaluator.setMetricName("weightedPrecision")
-# Evaluate the AUC of the RandomForestClassifier model
 auc_rf = evaluator.evaluate(predictions_rf)
 auc_gbt = evaluator.evaluate(predictions_gbt)
-
+print("AUC of Random Forest Classifier: ", auc_rf)
+print("AUC of GBT Classifier: ", auc_gbt)
 
 # Compare the results
 print("Accuracy of Random Forest Classifier: ", accuracy_rf)
@@ -240,6 +278,40 @@ models_compare = "Accuracy of Random Forest Classifier: " + accuracy_rf +\
 with open("models_compare.txt", "w") as file:
     file.write(str(models_compare))
 
+
+
+############# Draw the ROC curves of testing results #########################
+new_model = pipeline.fit(trainingData)
+lrModel = new_model.stages[1]
+trainingSummary = lrModel.summary
+
+# Obtain the objective per iteration
+# objectiveHistory = trainingSummary.objectiveHistory
+# print("objectiveHistory:")
+# for objective in objectiveHistory:
+#     print(objective)
+
+# Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
+trainingSummary.roc.show(5)
+print("areaUnderROC: " + str(trainingSummary.areaUnderROC))
+
+# Set the model threshold to maximize F-Measure
+fMeasure = trainingSummary.fMeasureByThreshold
+maxFMeasure = fMeasure.groupBy().max('F-Measure').select('max(F-Measure)').head(5)
+# bestThreshold = fMeasure.where(fMeasure['F-Measure'] == maxFMeasure['max(F-Measure)']) \
+#     .select('threshold').head()['threshold']
+# lr.setThreshold(bestThreshold)
+
+
+import matplotlib.pyplot as plt
+fpr = trainingSummary.roc.select('FPR').toPandas()
+tpr = trainingSummary.roc.select('TPR').toPandas()
+
+plt.plot(fpr, tpr)
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve')
+plt.show()
 # # Convert the predictions DataFrame to an RDD
 # predictions_rdd_rf = predictions_rf.select("rawPrediction", "label").rdd
 # predictions_rdd_gbt = predictions_gbt.select("rawPrediction", "label").rdd
